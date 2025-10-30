@@ -47,7 +47,7 @@ static float Size;
 struct Vector2 { float x, y; };
 struct Vector2D { double x, y; };
 struct RGB { float R, G, B; };
-struct Particle { float X, Y; Vector2 Velocity = { 0, 0 }; RGB color; };
+struct Particle { float X, Y; Vector2 Velocity = { 0, 0 }; RGB color; float OringialY; };
 struct Object { float X, Y, Size; RGB color; ObjectTypes ObjectType; };
 
 // -------------------- Globals --------------------
@@ -59,8 +59,8 @@ std::vector<ObjectTypes> ObjectType = {Circle,Square,Triangle };
 std::vector<std::string> ObjectTypeString = { "Cricle", "Square", "Triangle" };
 int CurrentObjectType = 0;
 
-int ParticleAmount = 20;
-int ParticleDistanceX = 25;
+int ParticleAmount = 25;
+int ParticleDistanceX = 20;
 
 
 
@@ -115,6 +115,7 @@ void DrawWindParticles() {
         if (p.X > ScreenSize.x)
         {
             p.X = 0;
+            p.Y = p.OringialY;
         }
     }
 }
@@ -130,6 +131,7 @@ bool PopulateParticleList() {
         for (int i = 0; i < ParticleAmount; i++) {
             Particle p;
             p.Y = padding * i + 50;
+            p.OringialY = p.Y;
             p.X = 0 -(j * ParticleDistanceX); // start on the left
             p.color = { 0.0745f, 0.2745f, 0.0667f };
             ParticleList.push_back(p);
@@ -287,7 +289,7 @@ void AddObjectWINDOWS()
             ObjectList.push_back(Item);
             std::cout << "added color " << R << ":" << G << ":" << B << std::endl;
             std::cout << "Shouldve added the object hah" << std::endl;
-            std::this_thread::sleep_for(std::chrono::milliseconds(250)); // ~60 FPS check        }
+            std::this_thread::sleep_for(std::chrono::milliseconds(10)); // ~60 FPS check        }
         }
     }
 }
@@ -334,40 +336,79 @@ Vector2D CheckCursorInWindow() {
 
 void CheckCollision()
 {
+    const float particleRadius = 5.0f;
+
     for (int i = 0; i < ParticleList.size(); i++)
     {
         Particle& p = ParticleList[i];
+        bool collided = false;
 
+        // ---- Collision with Objects ----
         for (int j = 0; j < ObjectList.size(); j++)
         {
             Object& obj = ObjectList[j];
-
             if (obj.ObjectType != Circle)
-                continue; // only check circles
+                continue;
 
             float dx = p.X - obj.X;
             float dy = p.Y - obj.Y;
             float distanceSquared = dx * dx + dy * dy;
+            float combinedRadius = obj.Size + particleRadius;
 
-            if (distanceSquared <= obj.Size * obj.Size)
+            if (distanceSquared <= combinedRadius * combinedRadius)
             {
-                // Collision detected
-                std::cout << "Particle " << i << " collided with Object " << j << std::endl;
-
-                // Example collision response: stop particle at object boundary
-                // Compute normalized vector from object to particle
                 float dist = std::sqrt(distanceSquared);
-                if (dist != 0) {
+                if (dist > 0)
+                {
                     float nx = dx / dist;
                     float ny = dy / dist;
-                    p.X = obj.X + nx * obj.Size;
-                    p.Y = obj.Y + ny * obj.Size;
 
-                    // Optionally, zero out velocity
+                    // Move particle just outside the object’s edge
+                    p.X = obj.X + nx * combinedRadius;
+                    p.Y = obj.Y + ny * combinedRadius;
+
                     p.Velocity.x = 0;
                     p.Velocity.y = 0;
+                    p.color = { 255, 0, 0 };
+                    collided = true;
                 }
             }
         }
+
+        // ---- Collision with Other Particles ----
+        for (int j = 0; j < ParticleList.size(); j++)
+        {
+            if (i == j)
+                continue;
+
+            Particle& other = ParticleList[j];
+            float dx = p.X - other.X;
+            float dy = p.Y - other.Y;
+            float distanceSquared = dx * dx + dy * dy;
+            float combinedRadius = particleRadius * 2.0f;
+
+            if (distanceSquared <= combinedRadius * combinedRadius)
+            {
+                float dist = std::sqrt(distanceSquared);
+                if (dist > 0)
+                {
+                    float nx = dx / dist;
+                    float ny = dy / dist;
+
+                    // Push this particle away so edges just touch
+                    p.X = other.X + nx * combinedRadius;
+                    p.Y = other.Y + ny * combinedRadius;
+
+                    p.Velocity.x = 0;
+                    p.Velocity.y = 0;
+                    p.color = { 255, 255, 0 };
+                    collided = true;
+                }
+            }
+        }
+
+        // ---- Default Color if No Collision ----
+        if (!collided)
+            p.color = { 0.0745f, 0.2745f, 0.0667f };
     }
 }
